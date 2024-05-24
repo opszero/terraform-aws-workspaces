@@ -267,3 +267,8 @@ variable "running_mode_auto_stop_timeout_in_minutes" {
   type        = number
   description = "The time after a user logs off when WorkSpaces are automatically stopped. Configured in 60-minute intervals."
 }
+
+variable "region" {
+  type    = string
+  default = null
+}

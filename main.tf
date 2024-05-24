@@ -2,13 +2,66 @@ data "aws_workspaces_bundle" "bundle" {
   bundle_id = var.bundle_id
 }
 
+resource "aws_directory_service_directory" "main" {
+  name        = var.ad_name
+  password    = var.ad_password
+  size        = var.ad_size
+  type        = var.type
+  alias       = var.alias
+  enable_sso  = var.enable_sso
+  description = var.description
+  short_name  = var.short_name
+  edition     = var.edition
+
+  dynamic "vpc_settings" {
+    for_each = length(keys(var.vpc_settings)) == 0 ? [] : [var.vpc_settings]
+
+    content {
+      subnet_ids = split(",", lookup(vpc_settings.value, "subnet_ids", null))
+      vpc_id     = lookup(vpc_settings.value, "vpc_id", null)
+    }
+  }
+
+  dynamic "connect_settings" {
+    for_each = length(keys(var.connect_settings)) == 0 ? [] : [var.connect_settings]
+
+    content {
+      customer_username = lookup(connect_settings.value, "customer_username", null)
+      customer_dns_ips  = lookup(connect_settings.value, "customer_dns_ips", null)
+      subnet_ids        = split(",", lookup(connect_settings.value, "subnet_ids", null))
+      vpc_id            = lookup(connect_settings.value, "vpc_id", null)
+    }
+  }
+  lifecycle {
+    ignore_changes = [edition]
+  }
+}
+
+data "aws_region" "current" {}
+
+
+
+
+locals {
+  ip_rules = var.ip_whitelist
+}
+
+resource "aws_workspaces_ip_group" "ipgroup" {
+  name = format("%s-ipgroup", var.name)
+  dynamic "rules" {
+    for_each = local.ip_rules
+    content {
+      source = rules.value
+    }
+  }
+}
+
 resource "aws_workspaces_directory" "main" {
 
-  directory_id = join("", aws_directory_service_directory.main[*].id)
+  directory_id = aws_directory_service_directory.main.id
   subnet_ids   = var.subnet_ids
-
   ip_group_ids = [
-    join("", aws_workspaces_ip_group.ipgroup[*].id),
+    aws_workspaces_ip_group.ipgroup.id,
   ]
 
   self_service_permissions {
@@ -41,68 +94,45 @@ resource "aws_workspaces_directory" "main" {
     aws_iam_role_policy_attachment.workspaces_default_self_service_access,
     aws_iam_role_policy_attachment.workspaces_custom_s3_access
   ]
+
+  lifecycle {
+    ignore_changes        = [subnet_ids] # Ignore changes to the subnet IDs
+    create_before_destroy = true         # Create the new directory before destroying the old one
+  }
 }
 
-resource "aws_directory_service_directory" "main" {
-  name        = var.ad_name
-  password    = var.ad_password
-  size        = var.ad_size
-  type        = var.type
-  alias       = var.alias
-  enable_sso  = var.enable_sso
-  description = var.description
-  short_name  = var.short_name
-  edition     = var.edition
+resource "null_resource" "register_directory" {
+  # This resource depends on the creation of the AWS Directory Service directory
+  depends_on = [aws_directory_service_directory.main]
 
-  dynamic "vpc_settings" {
-    for_each = length(keys(var.vpc_settings)) == 0 ? [] : [var.vpc_settings]
-
-    content {
-      subnet_ids = split(",", lookup(vpc_settings.value, "subnet_ids", null))
-      vpc_id     = lookup(vpc_settings.value, "vpc_id", null)
-    }
+  provisioner "local-exec" {
+    # Command to register the AWS WorkSpaces directory using AWS CLI
+    # This command is executed only after the AWS Directory Service directory is created
+    command = <<EOT
+      aws workspaces register-workspace-directory \
+        --directory-id ${aws_workspaces_directory.main.id} \
+        --subnet-ids "${join("\",\"", var.subnet_ids)}" \
+        --region ${data.aws_region.current.name} \
+        --enable-work-docs
+    EOT
   }
-
-  dynamic "connect_settings" {
-    for_each = length(keys(var.connect_settings)) == 0 ? [] : [var.connect_settings]
-
-    content {
-      customer_username = lookup(connect_settings.value, "customer_username", null)
-      customer_dns_ips  = lookup(connect_settings.value, "customer_dns_ips", null)
-      subnet_ids        = split(",", lookup(connect_settings.value, "subnet_ids", null))
-      vpc_id            = lookup(connect_settings.value, "vpc_id", null)
-    }
-  }
-
 }
 
-#data "aws_iam_policy_document" "workspaces" {
-#  statement {
-#    actions = ["sts:AssumeRole"]
-#
-#    principals {
-#      type        = "Service"
-#      identifiers = ["workspaces.amazonaws.com"]
-#    }
-#  }
-#}
+data "aws_iam_policy_document" "workspaces" {
+  statement {
+    actions = ["sts:AssumeRole"]
+
+    principals {
+      type        = "Service"
+      identifiers = ["workspaces.amazonaws.com"]
+    }
+  }
+}
 
 resource "aws_iam_role" "workspaces_default" {
-  name = format("%s-workspaces_Role", var.name)
-  assume_role_policy = jsonencode({
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Action = "sts:AssumeRole"
-        Effect = "Allow"
-        Principal = {
-          Service = "workspaces.amazonaws.com"
-        }
-      }
-    ]
-  })
+  name               = format("%s-workspaces_Role", var.name)
+  assume_role_policy = data.aws_iam_policy_document.workspaces.json
 }
-
 
 resource "aws_iam_role_policy_attachment" "workspaces_default_service_access" {
   role       = aws_iam_role.workspaces_default.name
@@ -120,20 +150,6 @@ resource "aws_iam_role_policy_attachment" "workspaces_custom_s3_access" {
   policy_arn = var.custom_policy
 }
 
-locals {
-  ip_rules = var.ip_whitelist
-}
-
-resource "aws_workspaces_ip_group" "ipgroup" {
-  name = format("%s-ipgroup", var.name)
-  dynamic "rules" {
-    for_each = local.ip_rules
-    content {
-      source = rules.value
-    }
-  }
-}
-
 resource "aws_workspaces_workspace" "workspace_ad" {
 
   directory_id                   = join("", aws_workspaces_directory.main[*].id)
@@ -149,5 +165,9 @@ resource "aws_workspaces_workspace" "workspace_ad" {
     root_volume_size_gib                      = var.root_volume_size_gib
     running_mode                              = var.running_mode
     running_mode_auto_stop_timeout_in_minutes = var.running_mode_auto_stop_timeout_in_minutes
+  }
+
+  timeouts {
+    create = "60m" # Timeout for resource creation (30 minutes in this example)
   }
 }
