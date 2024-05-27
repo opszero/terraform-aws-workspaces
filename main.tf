@@ -39,9 +39,6 @@ resource "aws_directory_service_directory" "main" {
 
 data "aws_region" "current" {}
 
-
-
-
 locals {
   ip_rules = var.ip_whitelist
 }
@@ -110,10 +107,10 @@ resource "null_resource" "register_directory" {
     # This command is executed only after the AWS Directory Service directory is created
     command = <<EOT
       aws workspaces register-workspace-directory \
-        --directory-id ${aws_workspaces_directory.main.id} \
-        --subnet-ids "${join("\",\"", var.subnet_ids)}" \
-        --region ${data.aws_region.current.name} \
-        --enable-work-docs
+      --directory-id ${aws_workspaces_directory.main.id} \
+      --subnet-ids "${join("\",\"", var.subnet_ids)}" \
+      --region ${data.aws_region.current.name} \
+      --no-enable-work-docs
     EOT
   }
 }
@@ -121,7 +118,6 @@ resource "null_resource" "register_directory" {
 data "aws_iam_policy_document" "workspaces" {
   statement {
     actions = ["sts:AssumeRole"]
-
     principals {
       type        = "Service"
       identifiers = ["workspaces.amazonaws.com"]
@@ -151,6 +147,7 @@ resource "aws_iam_role_policy_attachment" "workspaces_custom_s3_access" {
 }
 
 resource "aws_workspaces_workspace" "workspace_ad" {
+  count = var.enable_workspace ? 1 : 0
 
   directory_id                   = join("", aws_workspaces_directory.main[*].id)
   bundle_id                      = data.aws_workspaces_bundle.bundle.id
@@ -168,6 +165,14 @@ resource "aws_workspaces_workspace" "workspace_ad" {
   }
 
   timeouts {
-    create = "60m" # Timeout for resource creation (30 minutes in this example)
+    create = "30m" # Timeout for resource creation
+    update = "10m" # Timeout for resource update
+    delete = "10m" # Timeout for resource deletion
   }
+
+  depends_on = [
+    aws_directory_service_directory.main,
+    aws_iam_role.workspaces_default,
+    aws_workspaces_directory.main,
+  ]
 }

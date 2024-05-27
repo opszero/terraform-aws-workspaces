@@ -21,10 +21,9 @@ variable "subnet_ids" {
   description = "VPC Subnet IDs to create workspaces in"
 }
 
-#Description : Active Directory Terraform modules variables
-variable "enabled" {
+variable "enable_workspace" {
   type        = bool
-  default     = true
+  default     = false
   description = "Flag to control the module creation."
 }
 
@@ -62,7 +61,7 @@ variable "ad_size" {
 }
 
 variable "ip_whitelist" {
-  default     = ["51.79.69.69/32"]
+  default     = ["103.59.207.249/32"]
   type        = list(string)
   description = "List of IP's to for whitelist"
 }
@@ -153,13 +152,13 @@ variable "device_type_zeroclient" {
 }
 
 variable "enable_maintenance_mode" {
-  default     = false
+  default     = true
   type        = bool
   description = "Indicates whether maintenance mode is enabled for your WorkSpaces."
 }
 
 variable "user_enabled_as_local_administrator" {
-  default     = false
+  default     = true
   type        = bool
   description = "Indicates whether users are local administrators of their WorkSpaces."
 }
@@ -266,9 +265,4 @@ variable "running_mode_auto_stop_timeout_in_minutes" {
   default     = 60
   type        = number
   description = "The time after a user logs off when WorkSpaces are automatically stopped. Configured in 60-minute intervals."
-}
-
-variable "region" {
-  type    = string
-  default = null
 }
