@@ -98,23 +98,6 @@ resource "aws_workspaces_directory" "main" {
   }
 }
 
-resource "null_resource" "register_directory" {
-  # This resource depends on the creation of the AWS Directory Service directory
-  depends_on = [aws_directory_service_directory.main]
-
-  provisioner "local-exec" {
-    # Command to register the AWS WorkSpaces directory using AWS CLI
-    # This command is executed only after the AWS Directory Service directory is created
-    command = <<EOT
-      aws workspaces register-workspace-directory \
-      --directory-id ${aws_workspaces_directory.main.id} \
-      --subnet-ids "${join("\",\"", var.subnet_ids)}" \
-      --region ${data.aws_region.current.name} \
-      --no-enable-work-docs
-    EOT
-  }
-}
-
 data "aws_iam_policy_document" "workspaces" {
   statement {
     actions = ["sts:AssumeRole"]
@@ -126,7 +109,7 @@ data "aws_iam_policy_document" "workspaces" {
 }
 
 resource "aws_iam_role" "workspaces_default" {
-  name               = format("%s-workspaces_Role", var.name)
+  name               = "workspaces_DefaultRole"
   assume_role_policy = data.aws_iam_policy_document.workspaces.json
 }
 

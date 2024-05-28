@@ -1,7 +1,9 @@
-*.terraform/
+# ignored files
 *.tfstate
 *.tfstate.backup
-terraform.tfstate
-terraform.tfstate.backup
-*./idea
-/.idea/
+.terraform
+.idea
+*.iml
+go.sum
+*.terraform.lock.hcl
+*.terraform.tfstate.lock.info
