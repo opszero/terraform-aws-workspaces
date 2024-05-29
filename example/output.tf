@@ -1,8 +1,3 @@
-# outputs of aws workspaces
-output "id" {
-  value = module.workspace.id
-}
-
-output "ip_address" {
-  value = module.workspace.ip_address
+output "ad_id" {
+  value = module.workspace.ad_id
 }

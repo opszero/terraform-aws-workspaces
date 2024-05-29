@@ -1,7 +1,3 @@
-data "aws_workspaces_bundle" "bundle" {
-  bundle_id = var.bundle_id
-}
-
 resource "aws_directory_service_directory" "main" {
   name        = var.ad_name
   password    = var.ad_password
@@ -129,22 +125,27 @@ resource "aws_iam_role_policy_attachment" "workspaces_custom_s3_access" {
   policy_arn = var.custom_policy
 }
 
+data "aws_workspaces_bundle" "bundle" {
+  for_each  = var.workspaces
+  bundle_id = each.value.bundle_id
+}
+
 resource "aws_workspaces_workspace" "workspace_ad" {
-  count = var.enable_workspace ? 1 : 0
+  for_each = var.enable_workspace ? var.workspaces : {}
 
   directory_id                   = join("", aws_workspaces_directory.main[*].id)
-  bundle_id                      = data.aws_workspaces_bundle.bundle.id
-  user_name                      = var.workspace_username
-  root_volume_encryption_enabled = var.root_volume_encryption_enabled
-  user_volume_encryption_enabled = var.user_volume_encryption_enabled
-  volume_encryption_key          = var.volume_encryption_key
+  bundle_id                      = data.aws_workspaces_bundle.bundle[each.key].id
+  user_name                      = each.value.user_name
+  root_volume_encryption_enabled = each.value.root_volume_encryption_enabled
+  user_volume_encryption_enabled = each.value.user_volume_encryption_enabled
+  volume_encryption_key          = each.value.volume_encryption_key
 
   workspace_properties {
-    compute_type_name                         = var.compute_type_name
-    user_volume_size_gib                      = var.user_volume_size_gib
-    root_volume_size_gib                      = var.root_volume_size_gib
-    running_mode                              = var.running_mode
-    running_mode_auto_stop_timeout_in_minutes = var.running_mode_auto_stop_timeout_in_minutes
+    compute_type_name                         = each.value.compute_type_name
+    user_volume_size_gib                      = each.value.user_volume_size_gib
+    root_volume_size_gib                      = each.value.root_volume_size_gib
+    running_mode                              = each.value.running_mode
+    running_mode_auto_stop_timeout_in_minutes = each.value.running_mode_auto_stop_timeout_in_minutes
   }
 
   timeouts {
